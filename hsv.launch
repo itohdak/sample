@@ -1,0 +1,64 @@
+<launch>
+
+  <arg name="gui" default="true" />
+  <arg name="MANAGER" value="color_filter_nodelet_manager" />
+  <arg name="INPUT_CLOUD" default="/camera_remote/depth_registered/points" />
+  <arg name="INPUT_CAMERA_INFO" default="/camera_remote/rgb/camera_info" />  
+  
+  
+  <include file="$(find opencv_apps)/launch/hsv_color_filter.launch" >
+    <arg name="image" value="/camera_remote/rgb/image_rect_color" /> 
+    <arg name="h_limit_max" value="360" doc="The maximum allowed field value Hue" />
+    <arg name="h_limit_min" value="280" doc="The minimum allowed field value Hue" />
+    <arg name="s_limit_max" value="255" doc="The maximum allowed field value Saturation" />
+    <arg name="s_limit_min" value="128" doc="The minimum allowed field value Saturation" />
+    <arg name="v_limit_max" value="255" doc="The maximum allowed field value Value" />
+    <arg name="v_limit_min" value="180" doc="The minimum allowed field value Value" />
+  </include>
+  
+  <node name="$(arg MANAGER)"
+       pkg="nodelet" type="nodelet"
+       args="manager" />
+
+  <node name="erode_mask_image"
+  	pkg="nodelet" type="nodelet"
+  	args="load jsk_perception/ErodeMaskImage $(arg MANAGER)">
+    <remap from="~input" to="hsv_color_filter/image" />
+    <rosparam>
+      method: 0
+      size: 5
+    </rosparam>
+  </node>
+
+  <node name="mask_image_filter"
+  	pkg="nodelet" type="nodelet"
+  	args="load jsk_pcl/MaskImageFilter $(arg MANAGER)">
+    <remap from="~input" to="$(arg INPUT_CLOUD)" />
+    <remap from="~input/mask" to="erode_mask_image/output" />
+    <remap from="~input/camera_info" to="$(arg INPUT_CAMERA_INFO)" />
+  </node>
+
+  <node name="extract_indices" 
+	pkg="nodelet" type="nodelet"
+	args="load jsk_pcl/ExtractIndices $(arg MANAGER)" >
+    <remap from="~input" to="$(arg INPUT_CLOUD)" />
+    <remap from="~indices" to="mask_image_filter/output" />    
+  </node>
+
+  <node name="centroid_publisher" 
+	pkg="nodelet" type="nodelet"
+	args="load jsk_pcl/CentroidPublisher $(arg MANAGER)" >
+    <remap from="~input" to="extract_indices/output" />
+    <rosparam>
+      publish_tf: false
+    </rosparam>
+  </node>
+
+  <group if="$(arg gui)">
+    <node name="image_view0"
+  	  pkg="image_view" type="image_view">
+      <remap from="image" to="erode_mask_image/output" />
+    </node>
+  </group>
+  
+</launch>
